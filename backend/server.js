@@ -3,10 +3,9 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import path from "path";
-import { register, collectDefaultMetrics } from "prom-client";
 
+// Routes
 import authRoutes from "./routes/auth.route.js";
-import searchRoutes from "./routes/search.route.js";
 import userRoutes from "./routes/user.route.js";
 import postRoutes from "./routes/post.route.js";
 import notificationRoutes from "./routes/notification.route.js";
@@ -17,61 +16,46 @@ import { connectDB } from "./lib/db.js";
 dotenv.config();
 
 const app = express();
-
-collectDefaultMetrics({ register });
-
 const PORT = process.env.PORT || 5000;
 const __dirname = path.resolve();
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: "http://localhost:5173",
     credentials: true,
   }),
 );
 
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "5mb" })); // parse JSON bodies
 app.use(cookieParser());
-
-// Metrics endpoint
-app.get("/metrics", async (req, res) => {
-  try {
-    res.set("Content-Type", register.contentType);
-    res.send(await register.metrics());
-  } catch (err) {
-    res.status(500).send(err);
-  }
-});
 
 // API Routes
 app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/search", searchRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/connections", connectionRoutes);
 
-// Production Configuration.
+// Production setup
 if (process.env.NODE_ENV === "production") {
-  // Correctly pointing to your frontend dist folder
-  const pathToFrontend = path.join(__dirname, "frontend", "dist");
+  app.use(express.static(path.join(__dirname, "/frontend/dist")));
 
-  app.use(express.static(pathToFrontend));
-
-  // FIX: Using ':any*' provides a named parameter that stops the PathError crash
-  app.get("/:any*", (req, res) => {
-    res.sendFile(path.resolve(pathToFrontend, "index.html"));
+  // FIX: Changed "/:any*" to "*" to avoid the PathError crash
+  app.get("*", (req, res) => {
+    res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
   });
 }
 
+// Start Server
 const startServer = async () => {
   try {
     await connectDB();
+    // FIX: Added "0.0.0.0" so Nginx can reach the container
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on port ${PORT}`);
     });
-  } catch (err) {
-    console.error("Failed to connect to MongoDB", err);
+  } catch (error) {
+    console.error("Error starting server:", error);
     process.exit(1);
   }
 };
