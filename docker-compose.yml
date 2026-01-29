@@ -1,16 +1,12 @@
 version: "3.8"
 
 services:
-  # 1. Database
   mongodb:
-    image: mongo:latest
-    container_name: linkedin_db
+    image: mongo:6.0
     restart: always
-    ports:
-      - "27017:27017"
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - mongo_data:/data/db
     networks:
@@ -21,45 +17,42 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. Node.js API (Pulled from Docker Hub)
   backend:
     image: maheshdiwan/linkedin-backend:latest
-    container_name: linkedin_api
     restart: always
-    ports:
-      - "5000:5000"
     env_file:
       - .env
     environment:
-      - MONGO_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
-      - JWT_SECRET=${JWT_SECRET}
-      - CLIENT_URL=http://${AWS_HOST}
-      - NODE_ENV=production
-      - PORT=5000
+      MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET}
+      CLIENT_URL: http://frontend
+      NODE_ENV: production
+      PORT: 5000
     depends_on:
       mongodb:
         condition: service_healthy
     networks:
       - backend_net
       - frontend_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # 3. React + Nginx (Pulled from Docker Hub)
   frontend:
     image: maheshdiwan/linkedin-frontend:latest
-    container_name: linkedin_ui
     restart: always
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - frontend_net
 
-  # 4. Prometheus
   prometheus:
-    image: prom/prometheus:latest
-    container_name: linkedin_prometheus
-    restart: always
+    image: prom/prometheus:v2.48.0
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -68,28 +61,23 @@ services:
       - backend_net
       - frontend_net
 
-  # 5. Grafana
   grafana:
-    image: grafana/grafana:latest
-    container_name: linkedin_grafana
-    restart: always
+    image: grafana/grafana:10.2.0
     ports:
       - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
     networks:
       - backend_net
       - frontend_net
 
-  # 6. cAdvisor
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
-    container_name: linkedin_cadvisor
-    restart: always
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
     networks:
       - backend_net
 
@@ -99,3 +87,4 @@ networks:
 
 volumes:
   mongo_data:
+  grafana_data:
