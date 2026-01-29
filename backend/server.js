@@ -53,14 +53,13 @@ app.use("/api/v1/connections", connectionRoutes);
 
 // Production Configuration
 if (process.env.NODE_ENV === "production") {
-  // In your Docker structure, 'frontend' is likely a sibling directory to 'backend'
-  // If this file is in /app/ (backend), we look for /frontend/dist
+  // Correctly pointing to your frontend dist folder
   const pathToFrontend = path.join(__dirname, "frontend", "dist");
 
   app.use(express.static(pathToFrontend));
 
-  // FIX: Changed "*" to "(.*)" to prevent the PathError crash
-  app.get("(.*)", (req, res) => {
+  // FIX: Using ':any*' provides a named parameter that stops the PathError crash
+  app.get("/:any*", (req, res) => {
     res.sendFile(path.resolve(pathToFrontend, "index.html"));
   });
 }
