@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import path from "path";
-// 1. Import the monitoring tool
 import { register, collectDefaultMetrics } from "prom-client";
 
 import authRoutes from "./routes/auth.route.js";
@@ -19,7 +18,6 @@ dotenv.config();
 
 const app = express();
 
-// 2. Initialize default metrics collection (CPU, Memory, etc.)
 collectDefaultMetrics({ register });
 
 const PORT = process.env.PORT || 5000;
@@ -35,7 +33,7 @@ app.use(
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
 
-// 3. Expose the /metrics endpoint for Prometheus to scrape
+// Metrics endpoint
 app.get("/metrics", async (req, res) => {
   try {
     res.set("Content-Type", register.contentType);
@@ -45,6 +43,7 @@ app.get("/metrics", async (req, res) => {
   }
 });
 
+// API Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/search", searchRoutes);
 app.use("/api/v1/users", userRoutes);
@@ -52,14 +51,16 @@ app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/connections", connectionRoutes);
 
+// Production Configuration
 if (process.env.NODE_ENV === "production") {
-  // Use absolute path to the frontend dist folder
+  // In your Docker structure, 'frontend' is likely a sibling directory to 'backend'
+  // If this file is in /app/ (backend), we look for /frontend/dist
   const pathToFrontend = path.join(__dirname, "frontend", "dist");
 
   app.use(express.static(pathToFrontend));
 
-  // The "Catch-All" MUST be the very last GET route in the file
-  app.get("*", (req, res) => {
+  // FIX: Changed "*" to "(.*)" to prevent the PathError crash
+  app.get("(.*)", (req, res) => {
     res.sendFile(path.resolve(pathToFrontend, "index.html"));
   });
 }
