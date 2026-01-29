@@ -5,6 +5,7 @@ services:
   mongodb:
     image: mongo:latest
     container_name: linkedin_db
+    restart: always
     ports:
       - "27017:27017"
     environment:
@@ -20,11 +21,11 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. Node.js API
+  # 2. Node.js API (Pulled from Docker Hub)
   backend:
-    build: ./backend
+    image: maheshdiwan/linkedin-backend:latest
     container_name: linkedin_api
-    # EXPOSE PORT 5000: Needed for Prometheus to scrape and for you to verify
+    restart: always
     ports:
       - "5000:5000"
     env_file:
@@ -32,7 +33,7 @@ services:
     environment:
       - MONGO_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
       - JWT_SECRET=${JWT_SECRET}
-      - CLIENT_URL=http://localhost
+      - CLIENT_URL=http://${AWS_HOST}
       - NODE_ENV=production
       - PORT=5000
     depends_on:
@@ -42,13 +43,11 @@ services:
       - backend_net
       - frontend_net
 
-  # 3. React + Nginx Gateway
+  # 3. React + Nginx (Pulled from Docker Hub)
   frontend:
-    build:
-      context: ./frontend
-      args:
-        - VITE_BACKEND_URL=http://localhost
+    image: maheshdiwan/linkedin-frontend:latest
     container_name: linkedin_ui
+    restart: always
     ports:
       - "80:80"
     depends_on:
@@ -56,12 +55,11 @@ services:
     networks:
       - frontend_net
 
-  # --- MONITORING STACK ---
-
-  # 4. Prometheus: The Metrics Database
+  # 4. Prometheus
   prometheus:
     image: prom/prometheus:latest
     container_name: linkedin_prometheus
+    restart: always
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -70,20 +68,22 @@ services:
       - backend_net
       - frontend_net
 
-  # 5. Grafana: The Visualization Dashboard
+  # 5. Grafana
   grafana:
     image: grafana/grafana:latest
     container_name: linkedin_grafana
+    restart: always
     ports:
       - "3000:3000"
     networks:
       - backend_net
       - frontend_net
 
-  # 6. cAdvisor: Monitors Container Hardware Usage (CPU/RAM)
+  # 6. cAdvisor
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: linkedin_cadvisor
+    restart: always
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
