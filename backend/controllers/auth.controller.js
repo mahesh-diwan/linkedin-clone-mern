@@ -4,21 +4,18 @@ import jwt from "jsonwebtoken";
 import { sendWelcomeEmail } from "../emails/emailHandlers.js";
 import validator from "validator";
 
-// UPDATED COOKIE_OPTIONS for HTTP Production (AWS IP)
 const COOKIE_OPTIONS = {
   httpOnly: true,
   maxAge: 3 * 24 * 60 * 60 * 1000,
-  // Use "lax" even in production if you don't have HTTPS
-  // "None" REQUIRES secure: true, which REQUIRES HTTPS.
-  sameSite: "lax",
-  // MUST be false for raw IP (http://) access, otherwise browser rejects it.
-  secure: false,
+  sameSite: process.env.NODE_ENV === "production" ? "None" : "lax",
+  secure: process.env.NODE_ENV === "production",
 };
 
 export const signup = async (req, res) => {
   try {
     let { name, username, email, password } = req.body;
 
+    // ---------- Basic validation ----------
     if (!name || !username || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -30,12 +27,14 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "Invalid email address" });
     }
 
+    // ---------- Gmail-only restriction ----------
     if (!email.endsWith("@gmail.com")) {
       return res.status(400).json({
         message: "Only Gmail addresses are allowed",
       });
     }
 
+    // ---------- Check duplicates ----------
     const existingEmail = await User.findOne({ email });
     if (existingEmail) {
       return res.status(400).json({ message: "Email already exists" });
@@ -46,8 +45,10 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "Username already taken" });
     }
 
+    // ---------- Password hashing ----------
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // ---------- Create user ----------
     const user = new User({
       name,
       email,
@@ -57,12 +58,14 @@ export const signup = async (req, res) => {
 
     await user.save();
 
+    // ---------- JWT ----------
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "3d",
     });
 
     res.cookie("jwt-linkedin", token, COOKIE_OPTIONS);
 
+    // ---------- Response ----------
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -70,6 +73,7 @@ export const signup = async (req, res) => {
       username: user.username,
     });
 
+    // ---------- Welcome email (non-blocking) ----------
     const profileUrl = `${process.env.CLIENT_URL}/profile/${user.username}`;
     sendWelcomeEmail(user.email, user.name, profileUrl).catch((err) =>
       console.error("Email failed:", err.message),
@@ -100,7 +104,6 @@ export const login = async (req, res) => {
 
     res.cookie("jwt-linkedin", token, COOKIE_OPTIONS);
 
-    // NOTE: Ensure your frontend is looking for this JSON message to trigger a redirect
     res.json({ message: "Logged in successfully" });
   } catch (error) {
     console.error("Error in login controller:", error);
@@ -109,7 +112,11 @@ export const login = async (req, res) => {
 };
 
 export const logout = (req, res) => {
-  res.clearCookie("jwt-linkedin", COOKIE_OPTIONS);
+  res.clearCookie("jwt-linkedin", {
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === "production" ? "None" : "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
   res.json({ message: "Logged out successfully" });
 };
 
