@@ -10,32 +10,34 @@ import postRoutes from "./routes/post.route.js";
 import notificationRoutes from "./routes/notification.route.js";
 import connectionRoutes from "./routes/connection.route.js";
 import { connectDB } from "./lib/db.js";
+
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const __dirname = path.resolve();
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true,
   }),
 );
 app.use(express.json({ limit: "5mb" })); // parse JSON bodies
 app.use(cookieParser());
-// API Route
+
+// API Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/connections", connectionRoutes);
-// Production setup
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "/frontend/dist")));
-  // Catch-all route for SPA - must be AFTER all other routes
-  app.get("*", (req, res) => {
-    res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
-  });
-}
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 // Start Server
 const startServer = async () => {
   try {
@@ -49,4 +51,5 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
 startServer();
