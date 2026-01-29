@@ -12,22 +12,12 @@ services:
     networks:
       - backend_net
     healthcheck:
-      test:
-        [
-          "CMD",
-          "mongo",
-          "--username",
-          "${MONGO_ROOT_USER}",
-          "--password",
-          "${MONGO_ROOT_PASSWORD}",
-          "--authenticationDatabase",
-          "admin",
-          "--eval",
-          "db.adminCommand('ping')",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      # We use 'mongo' or 'mongosh' depending on the image version
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 20s # Give it more time between checks
+      timeout: 10s
+      retries: 5
+      start_period: 40s
 
   backend:
     image: maheshdiwan/linkedin-backend:latest
