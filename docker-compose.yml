@@ -11,7 +11,7 @@ services:
     volumes:
       - mongo_data:/data/db
     networks:
-      - backend_net
+      - app_network
 
   backend:
     image: maheshdiwan/linkedin-backend:latest
@@ -28,8 +28,7 @@ services:
     depends_on:
       - mongodb
     networks:
-      - backend_net
-      - frontend_net
+      - app_network
 
   frontend:
     image: maheshdiwan/linkedin-frontend:latest
@@ -40,7 +39,7 @@ services:
     depends_on:
       - backend
     networks:
-      - frontend_net
+      - app_network
 
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -50,8 +49,7 @@ services:
     ports:
       - "9090:9090"
     networks:
-      - backend_net
-      - frontend_net
+      - app_network
 
   grafana:
     image: grafana/grafana:10.2.0
@@ -61,8 +59,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
-      - backend_net
-      - frontend_net
+      - app_network
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
@@ -73,11 +70,11 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     networks:
-      - backend_net
+      - app_network
 
 networks:
-  frontend_net:
-  backend_net:
+  app_network:
+    driver: bridge
 
 volumes:
   mongo_data:
