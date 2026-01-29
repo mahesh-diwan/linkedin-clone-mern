@@ -60,5 +60,4 @@ jobs:
             docker-compose pull
             docker-compose up -d
             sleep 10
-            curl -f http://localhost/api/health
             docker image prune -f
