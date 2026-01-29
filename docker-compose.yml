@@ -1,8 +1,10 @@
 version: "3.8"
 
 services:
+  # 1. Database
   mongodb:
     image: mongo:6.0
+    container_name: linkedin_db
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
@@ -12,31 +14,36 @@ services:
     networks:
       - backend_net
     healthcheck:
-      # Use mongosh and add --quiet to prevent log spam
+      # We must provide credentials here, otherwise Mongo rejects the ping
       test:
         [
           "CMD",
           "mongosh",
+          "admin",
+          "-u",
+          "${MONGO_ROOT_USER}",
+          "-p",
+          "${MONGO_ROOT_PASSWORD}",
           "--quiet",
-          "127.0.0.1:27017/test",
           "--eval",
           "db.adminCommand('ping')",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
-      # Give the DB 30 seconds to initialize before the first healthcheck runs
-      start_period: 30s
+      start_period: 40s
 
+  # 2. Node.js API
   backend:
     image: maheshdiwan/linkedin-backend:latest
+    container_name: linkedin_api
     restart: always
     env_file:
       - .env
     environment:
       MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
       JWT_SECRET: ${JWT_SECRET}
-      CLIENT_URL: http://frontend
+      CLIENT_URL: http://54.163.6.131
       NODE_ENV: production
       PORT: 5000
     depends_on:
@@ -46,13 +53,21 @@ services:
       - backend_net
       - frontend_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
+      # Since there is no /health route, we check if the port is accepting connections
+      test:
+        [
+          "CMD-SHELL",
+          'node -e ''require("http").get("http://localhost:5000/metrics", (res) => res.statusCode === 200 ? process.exit(0) : process.exit(1))''',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 30s
 
+  # 3. React + Nginx
   frontend:
     image: maheshdiwan/linkedin-frontend:latest
+    container_name: linkedin_ui
     restart: always
     ports:
       - "80:80"
@@ -62,8 +77,11 @@ services:
     networks:
       - frontend_net
 
+  # 4. Prometheus
   prometheus:
     image: prom/prometheus:v2.48.0
+    container_name: linkedin_prometheus
+    restart: always
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -72,8 +90,11 @@ services:
       - backend_net
       - frontend_net
 
+  # 5. Grafana
   grafana:
     image: grafana/grafana:10.2.0
+    container_name: linkedin_grafana
+    restart: always
     ports:
       - "3000:3000"
     volumes:
@@ -82,8 +103,11 @@ services:
       - backend_net
       - frontend_net
 
+  # 6. cAdvisor
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
+    container_name: linkedin_cadvisor
+    restart: always
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
