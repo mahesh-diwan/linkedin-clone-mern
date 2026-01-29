@@ -51,7 +51,7 @@ app.use("/api/v1/posts", postRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/connections", connectionRoutes);
 
-// Production Configuration
+// Production Configuration.
 if (process.env.NODE_ENV === "production") {
   // Correctly pointing to your frontend dist folder
   const pathToFrontend = path.join(__dirname, "frontend", "dist");
