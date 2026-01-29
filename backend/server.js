@@ -53,11 +53,13 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/connections", connectionRoutes);
 
 if (process.env.NODE_ENV === "production") {
-  const pathToFrontend = path.join(__dirname, "..", "frontend", "dist");
+  // Use absolute path to the frontend dist folder
+  const pathToFrontend = path.join(__dirname, "frontend", "dist");
 
   app.use(express.static(pathToFrontend));
 
-  app.get(/.*/, (req, res) => {
+  // The "Catch-All" MUST be the very last GET route in the file
+  app.get("*", (req, res) => {
     res.sendFile(path.resolve(pathToFrontend, "index.html"));
   });
 }
