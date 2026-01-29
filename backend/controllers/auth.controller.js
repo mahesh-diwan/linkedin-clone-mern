@@ -8,7 +8,7 @@ import validator from "validator";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   maxAge: 3 * 24 * 60 * 60 * 1000,
-  // Use "lax" even in production if you don't have HTTPS.
+  // Use "lax" even in production if you don't have HTTPS
   // "None" REQUIRES secure: true, which REQUIRES HTTPS.
   sameSite: "lax",
   // MUST be false for raw IP (http://) access, otherwise browser rejects it.
