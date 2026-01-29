@@ -12,12 +12,21 @@ services:
     networks:
       - backend_net
     healthcheck:
-      # We use 'mongo' or 'mongosh' depending on the image version
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
-      interval: 20s # Give it more time between checks
-      timeout: 10s
+      # Use mongosh and add --quiet to prevent log spam
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "127.0.0.1:27017/test",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 40s
+      # Give the DB 30 seconds to initialize before the first healthcheck runs
+      start_period: 30s
 
   backend:
     image: maheshdiwan/linkedin-backend:latest
