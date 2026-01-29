@@ -1,0 +1,26 @@
+node_modules/
+.env
+frontend/dist/
+*.log
+.DS_Store
+
+# --- Terraform ---
+# Local .terraform folder (binary plugins)
+.terraform/
+
+# State files (contains your infra secrets!)
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Terraform variables (where you might keep secrets)
+*.tfvars
+*.tfvars.json
+
+# --- AWS & SSH Secrets ---
+*.pem
+.aws/
+.env

@@ -1,0 +1,101 @@
+version: "3.8"
+
+services:
+  # 1. Database
+  mongodb:
+    image: mongo:latest
+    container_name: linkedin_db
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Node.js API
+  backend:
+    build: ./backend
+    container_name: linkedin_api
+    # EXPOSE PORT 5000: Needed for Prometheus to scrape and for you to verify
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - MONGO_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - CLIENT_URL=http://localhost
+      - NODE_ENV=production
+      - PORT=5000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - backend_net
+      - frontend_net
+
+  # 3. React + Nginx Gateway
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - VITE_BACKEND_URL=http://localhost
+    container_name: linkedin_ui
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - frontend_net
+
+  # --- MONITORING STACK ---
+
+  # 4. Prometheus: The Metrics Database
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: linkedin_prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - backend_net
+      - frontend_net
+
+  # 5. Grafana: The Visualization Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: linkedin_grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - backend_net
+      - frontend_net
+
+  # 6. cAdvisor: Monitors Container Hardware Usage (CPU/RAM)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: linkedin_cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - backend_net
+
+networks:
+  frontend_net:
+  backend_net:
+
+volumes:
+  mongo_data:
