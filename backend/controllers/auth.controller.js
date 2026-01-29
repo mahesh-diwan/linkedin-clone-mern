@@ -7,8 +7,8 @@ import validator from "validator";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   maxAge: 3 * 24 * 60 * 60 * 1000,
-  sameSite: process.env.NODE_ENV === "production" ? "None" : "lax",
-  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax", // Required for HTTP
+  secure: false, // MUST BE FALSE for http://54.163.6.131
 };
 
 export const signup = async (req, res) => {
