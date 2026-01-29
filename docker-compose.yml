@@ -14,7 +14,7 @@ services:
     networks:
       - backend_net
     healthcheck:
-      # We must provide credentials here, otherwise Mongo rejects the ping
+      # We must provide credentials here, otherwise Mongo rejects the pin
       test:
         [
           "CMD",
