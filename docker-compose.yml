@@ -1,18 +1,51 @@
+# ============================================
+# OPTIMIZED PRODUCTION DOCKER-COMPOSE
+# ============================================
+# File: docker-compose.prod.yml
+
 version: "3.8"
 
 services:
+  # ============================================
+  # MONGODB - DATABASE
+  # ============================================
   mongodb:
-    image: mongo:6.0
+    image: mongo:6.0-alpine
     container_name: linkedin_db
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
     volumes:
       - mongo_data:/data/db
+      - mongo_config:/data/configdb
     networks:
       - app_network
+    ports:
+      - "127.0.0.1:27017:27017" # Only localhost access
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    resources:
+      limits:
+        cpus: "1"
+        memory: 1024M
+      reservations:
+        cpus: "0.5"
+        memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # ============================================
+  # BACKEND - NODE.JS API
+  # ============================================
   backend:
     image: maheshdiwan/linkedin-backend:latest
     container_name: linkedin_api
@@ -20,62 +53,253 @@ services:
     env_file:
       - .env
     environment:
-      MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
+      # Database
+      MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin&retryWrites=true
+      # Security
       JWT_SECRET: ${JWT_SECRET}
-      CLIENT_URL: http://54.163.6.131
+      # URLs
+      CLIENT_URL: ${CLIENT_URL}
+      # Environment
       NODE_ENV: production
       PORT: 5000
+      # Node options
+      NODE_OPTIONS: --max-old-space-size=512
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - app_network
+    expose:
+      - "5000" # Only expose internally, not to host
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    resources:
+      limits:
+        cpus: "1"
+        memory: 512M
+      reservations:
+        cpus: "0.5"
+        memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - backend_logs:/app/logs
+    security_opt:
+      - no-new-privileges:true
 
+  # ============================================
+  # FRONTEND - NGINX WEB SERVER
+  # ============================================
   frontend:
     image: maheshdiwan/linkedin-frontend:latest
     container_name: linkedin_ui
     restart: always
     ports:
       - "80:80"
+      # Uncomment for HTTPS:
+      # - "443:443"
+    environment:
+      VITE_BACKEND_URL: /api
+      # Nginx variables
+      TZ: UTC
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: 256M
+      reservations:
+        cpus: "0.25"
+        memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    # Uncomment to mount SSL certificates
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro
 
+  # ============================================
+  # PROMETHEUS - METRICS COLLECTION
+  # ============================================
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:v2.48.0-alpine
     container_name: linkedin_prometheus
+    restart: always
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
+      - prometheus_data:/prometheus
     networks:
       - app_network
-
-  grafana:
-    image: grafana/grafana:10.2.0
-    container_name: linkedin_grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:9090:9090" # Only localhost access
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9090/-/healthy",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: 256M
+      reservations:
+        cpus: "0.25"
+        memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # ============================================
+  # GRAFANA - VISUALIZATION & DASHBOARDS
+  # ============================================
+  grafana:
+    image: grafana/grafana:10.2.0-alpine
+    container_name: linkedin_grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_INSTALL_PLUGINS: "grafana-piechart-panel"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - app_network
+    ports:
+      - "127.0.0.1:3000:3000" # Only localhost access
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: 256M
+      reservations:
+        cpus: "0.25"
+        memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
+  # ============================================
+  # cADVISOR - CONTAINER MONITORING
+  # ============================================
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: linkedin_cadvisor
+    restart: always
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
     networks:
       - app_network
+    ports:
+      - "127.0.0.1:8080:8080" # Only localhost access
+    command:
+      - "--port=8080"
+      - "--housekeeping_interval=30s"
+      - "--docker_only=true"
+      - "--disable_root_cgroup_stats=true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1.3/machine"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: 256M
+      reservations:
+        cpus: "0.25"
+        memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
+# ============================================
+# NETWORKS
+# ============================================
 networks:
   app_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
+# ============================================
+# VOLUMES
+# ============================================
 volumes:
+  # Database
   mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
+
+  # Application logs
+  backend_logs:
+    driver: local
+
+  # Monitoring
+  prometheus_data:
+    driver: local
   grafana_data:
+    driver: local
+
+# ============================================
+# NOTES
+# ============================================
+# 1. All services have health checks for reliability
+# 2. Resource limits prevent one service from consuming all resources
+# 3. Logging is configured with max-size and max-file to prevent disk space issues
+# 4. Internal-only ports (127.0.0.1) secure monitoring dashboards
+# 5. Environment variables from .env file
+# 6. MongoDB replica set can be enabled for production clustering
+# 7. Uncomment volumes section for SSL certificate mounting
+# 8. Prometheus retention is set to 30 days
