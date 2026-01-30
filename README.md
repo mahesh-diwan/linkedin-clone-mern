@@ -1,181 +1,88 @@
-# LinkedIn Clone MERN
+# 🚀 LinkedIn Clone: Full-Stack Containerized Deployment
 
-A simplified LinkedIn-like social network built with the **MERN** stack (MongoDB, Express, React, Node). This repository contains a full-stack example demonstrating common features found in professional social networks: user authentication, profiles, posts with media, likes/comments, connections, and notifications.
+A professionally architected LinkedIn clone demonstrating a full-stack microservices approach. This project focuses on container orchestration, reverse proxy routing, and automated CI/CD workflows.
 
-> ⚠️ This project is intended for learning and demo purposes only. It is **not** production hardened — do not use it to store real user data without adding security, validation, and compliance checks.
 
----
 
-<!-- ## Table of Contents
+## 🏗 System Architecture
 
-- [Live demo](#live-demo)
-- [Features](#features)
-- [Tech stack](#tech-stack)
-- [Repository structure](#repository-structure)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Environment variables](#environment-variables)
-- [Run (development)](#run-development)
-- [Build & deploy](#build--deploy)
-- [API endpoints (overview)](#api-endpoints-overview)
-- [Database models (overview)](#database-models-overview)
-- [Testing](#testing)
-- [Best practices & TODOs](#best-practices--todos)
-- [Contributing](#contributing)
-- [License](#license)
+The application is decomposed into independent services managed via **Docker Compose** to ensure environment parity between development and production .
 
---- -->
+* **Frontend**: React.js / Vite SPA served via **Nginx**.
+* **Backend**: Node.js & Express API handling business logic and JWT-based authentication.
+* **Database**: MongoDB 6.0 with persistent volume mapping for data durability.
+* **Reverse Proxy**: Nginx acts as the primary entry point (Port 80), handling SPA routing and proxying `/api` requests to the internal backend service.
+* **Monitoring**: Prometheus & Grafana stack for real-time container health and resource tracking.
 
-<!-- ## Live demo
 
-_None provided by default._ If you deploy this project to a service (e.g., Render, Vercel, Heroku, or Railway), add the link here.
 
---- -->
+## 🛠 Tech Stack
 
-## 📸 Screenshots
-
-### Login Page
-
-![Login Page](./frontend/public/login-page.png)
-
-### Home Page
-
-![Home page](./frontend/public/home.png)
-
-### Profile Page
-
-![Profile page](./frontend/public/my-profile.png)
-
-### My Network Page
-
-![Network Page](./frontend/public/my-network.png)
-
-### Notification Page
-
-![Notification page](./frontend/public/notifications.png)
-
-### Suggestions Page
-
-![Suggestions page](./frontend/public/suggetions.png)
-
-### Suggestion Profile Page
-
-![Suggestion Profile page](./frontend/public/other-profile.png)
+| Component      | Technology                               |
+| :------------- | :--------------------------------------- |
+| **Frontend** | React, Vite, Tailwind CSS, Axios         |
+| **Backend** | Node.js, Express, Mongoose               |
+| **Database** | MongoDB (NoSQL)                          |
+| **DevOps** | Docker, Docker Compose, GitHub Actions   |
+| **Cloud** | AWS EC2 (Ubuntu)                         |
+| **Web Server** | Nginx                                    |
 
 ---
 
-## Features
+## 🚀 DevOps & CI/CD Flow
 
-- User signup / login with JWT-based authentication
-- Profile creation and editing (headline, bio, experience, education)
-- Create, edit, delete posts (text + image upload support)
-- Like and comment on posts
-- Follow / connect system (follow, accept requests, recommendations)
-- Simple notifications feed
-- Search users and posts
-- Responsive React UI
+This project utilizes a fully automated pipeline to ensure rapid and reliable deployments:
 
----
+1.  **Version Control**: Code is pushed to the `main` branch on GitHub.
+2.  **GitHub Actions**: 
+    * Triggers a build process for both Frontend and Backend images.
+    * Pushes optimized images to **Docker Hub**.
+    * Executes a remote SSH script to update the **AWS EC2** instance.
+3.  **Deployment**: The server pulls updated images and performs a `--force-recreate` to ensure the latest code is live without manual intervention.
 
-## Tech stack
 
-- Frontend: React (Create React App or Vite) + React Router + Redux + Tailwind CSS
-- Backend: Node.js + Express
-- Database: MongoDB (Mongoose ODM)
-- Authentication: JWT (JSON Web Tokens)
-- File storage: local uploads for dev or S3-compatible for production
-- Dev tooling: ESLint, Prettier, concurrently (optional)
 
 ---
 
-## Repository structure
+## 🔧 Engineering Challenges Solved
 
-```
-/ (root)
-├─ backend/
-│  ├─ controllers/
-│  ├─ models/
-│  ├─ routes/
-│  └─ utils/
-├─ .env.example
-├─ README.md
-└─ package.json
-├─ frontend/
-│  ├─ public/
-│  └─ src/
-│     ├─ components/
-│     ├─ pages/
-│     ├─ hooks/
-│     └─ services/
-├─ README.md
-└─ package.json
-```
+### 1. Reverse Proxy Optimization
+Configured Nginx to resolve the "Single Page Application" routing issue (404 on refresh) using `try_files` and managed internal networking to resolve the **502 Bad Gateway** by binding the Node.js server to `0.0.0.0`.
+
+### 2. Path-to-Regexp Migration
+Resolved backend startup crashes by migrating wildcard routes from deprecated syntax (`/:any*`) to modern Express standards (`*`), ensuring compatibility with Node v18+ environments.
+
+### 3. Data Persistence
+Implemented Docker volumes to decouple the MongoDB data layer from the container lifecycle, ensuring user profiles and posts persist through updates and reboots.
 
 ---
 
-## API endpoints (overview)
+## 🚦 Installation & Local Setup
 
-This section lists the most important endpoints. Adjust according to actual implementation.
+### Prerequisites
+* Docker & Docker Compose
+* Node.js v18+
 
-```
-POST   /api/auth/register    # Register new user
-POST   /api/auth/login       # Login, returns JWT
-GET    /api/auth/me          # Get current user (protected)
-
-GET    /api/users/:id        # Get user profile
-PUT    /api/users/:id        # Update profile (protected)
-
-POST   /api/posts            # Create post (protected)
-GET    /api/posts            # Get posts (feed)
-GET    /api/posts/:id        # Get single post
-PUT    /api/posts/:id        # Edit post (protected)
-DELETE /api/posts/:id        # Delete post (protected)
-POST   /api/posts/:id/like   # Like / unlike post (protected)
-POST   /api/posts/:id/comment# Add comment (protected)
-
-POST   /api/connections/:id  # Send connection/follow request
-POST   /api/connections/:id/accept
-GET    /api/notifications
-```
+### Setup
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/maheshdiwan/linkedin-clone.git](https://github.com/maheshdiwan/linkedin-clone.git)
+    cd linkedin-clone
+    ```
+2.  **Configure Environment Variables:**
+    Create a `.env` file in the root with your DB credentials, JWT secrets, and API URLs.
+3.  **Spin up the stack:**
+    ```bash
+    docker-compose up -d --build
+    ```
+4.  **Access the app:**
+    Open `http://localhost` for the frontend and `http://localhost/api/v1` for the API.
 
 ---
 
-## Database models (overview)
-
-Example Mongoose models you might have:
-
-- **User**: _name, email, passwordHash, headline, location, about, experience\[], education\[], skills\[], avatarUrl, connections\[]_
-- **Post**: _author (User ref), text, mediaUrl, likes \[User refs], comments \[{ author, text, createdAt }], createdAt_
-  **ConnectionRequests**: _sender (User ref), receiver (User ref), status \[pending|accepted|rejected], createdAt, updatedAt_
-- **Notification**: _user (recipient), type, payload, read, createdAt_
+## 📈 Roadmap
+* **Security**: Integrating Let's Encrypt for automated SSL/TLS termination.
+* **Scale**: Transitioning from Docker Compose to Kubernetes (EKS) for horizontal scaling.
+* **Performance**: Implementing Redis for session caching and feed optimization.
 
 ---
-
-## Authentication & Security notes
-
-- Passwords should be hashed using `bcrypt` (never store plain text).
-- Use HTTPS in production and set secure cookies if you switch to cookie-based auth.
-- Validate and sanitize user input to prevent XSS/NoSQL injection.
-- Limit file upload size and validate file types if accepting images.
-
----
-
-## Testing
-
-Add unit and integration tests with Jest and Supertest for the backend and React Testing Library for the frontend. Example commands:
-
-```bash
-# server
-cd server
-npm test
-
-# client
-cd client
-npm test
-```
-
----
-
-## Contributing
-
-Contributions are welcome! Please open issues for bugs or feature requests and submit PRs with clear descriptions. Follow the repository's code style and add tests for new features.
