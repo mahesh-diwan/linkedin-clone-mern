@@ -2,8 +2,6 @@
 
 A professionally architected LinkedIn clone demonstrating a full-stack microservices approach. This project focuses on container orchestration, reverse proxy routing, and automated CI/CD workflows.
 
-
-
 ## 🏗 System Architecture
 
 The application is decomposed into independent services managed via **Docker Compose** to ensure environment parity between development and production .
