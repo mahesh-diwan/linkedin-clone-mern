@@ -10,18 +10,13 @@ jobs:
 
     env:
       AWS_REGION: ap-south-1
-      BACKEND_REPO: linkedin-backend
-      FRONTEND_REPO: linkedin-frontend
-      ECS_SERVICE: linkedin-service
-      ECS_CLUSTER: linkedin-cluster
-      TASK_DEFINITION: task-definition.json
+      ECR_BACKEND_REPO: linkedin-backend
+      ECR_FRONTEND_REPO: linkedin-frontend
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       # ✅ AWS Credentials
       - name: Configure AWS Credentials
@@ -47,22 +42,20 @@ jobs:
       # ================= BACKEND =================
 
       - name: Build Backend Image
-        run: |
-          docker build -t backend ./backend
+        run: docker build -t backend ./backend
 
       - name: Scan Backend Image
-        run: |
-          trivy image --exit-code 1 --severity HIGH,CRITICAL backend
+        run: trivy image --exit-code 1 --severity HIGH,CRITICAL backend
 
       - name: Tag Backend Image
         run: |
-          docker tag backend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO }}:latest
-          docker tag backend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO }}:${{ github.sha }}
+          docker tag backend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:latest
+          docker tag backend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:${{ github.sha }}
 
       - name: Push Backend Image
         run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO }}:latest
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO }}:${{ github.sha }}
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:${{ github.sha }}
 
       # ================= FRONTEND =================
 
@@ -72,25 +65,40 @@ jobs:
             --build-arg VITE_BACKEND_URL=/api
 
       - name: Scan Frontend Image
-        run: |
-          trivy image --exit-code 1 --severity HIGH,CRITICAL frontend
+        run: trivy image --exit-code 1 --severity HIGH,CRITICAL frontend
 
       - name: Tag Frontend Image
         run: |
-          docker tag frontend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO }}:latest
-          docker tag frontend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
+          docker tag frontend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:latest
+          docker tag frontend:latest ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:${{ github.sha }}
 
       - name: Push Frontend Image
         run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO }}:latest
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:${{ github.sha }}
 
-      # ================= ECS DEPLOY =================
+      # ================= DEPLOY (UNCHANGED) =================
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      - name: Copy Configs to Server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          task-definition: ${{ env.TASK_DEFINITION }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          host: ${{ secrets.HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_KEY }}
+          source: "docker-compose.yml,prometheus.yml"
+          target: "~/app"
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            cd ~/app
+            docker login -u AWS -p $(aws ecr get-login-password --region ap-south-1) <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com
+            docker-compose pull
+            docker-compose up -d
+            sleep 10
+            docker image prune -f
