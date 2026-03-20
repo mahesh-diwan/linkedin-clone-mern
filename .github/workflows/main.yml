@@ -11,8 +11,8 @@ env:
   ECR_FRONTEND_REPO: linkedin-frontend
 
   ECS_CLUSTER: linkedin-cluster
-  ECS_BACKEND_SERVICE: linkedin-backend-service
-  ECS_FRONTEND_SERVICE: linkedin-frontend-service
+  ECS_BACKEND_SERVICE: backend_task-service-0yj67584
+  ECS_FRONTEND_SERVICE: frontend_task-service-72jz3q64
 
 jobs:
   deploy:
