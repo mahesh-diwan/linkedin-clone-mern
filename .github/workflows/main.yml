@@ -1,105 +1,70 @@
-name: CI/CD Pipeline
+name: Deploy Full App to ECS
 
 on:
   push:
     branches: [main]
 
+env:
+  AWS_REGION: ap-south-1
+
+  ECR_BACKEND_REPO: linkedin-backend
+  ECR_FRONTEND_REPO: linkedin-frontend
+
+  ECS_CLUSTER: linkedin-cluster
+  ECS_BACKEND_SERVICE: linkedin-backend-service
+  ECS_FRONTEND_SERVICE: linkedin-frontend-service
+
 jobs:
-  build-push-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v3
 
-      - uses: docker/setup-buildx-action@v3
+    - name: Configure AWS
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
 
-      # ✅ Configure AWS
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
+    - name: Login to ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
 
-      # ✅ Login to ECR
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+    # ---------------- BACKEND ----------------
+    - name: Build Backend Image
+      run: |
+        docker build -t $ECR_BACKEND_REPO ./backend
+        docker tag $ECR_BACKEND_REPO:latest ${{ steps.login-ecr.outputs.registry }}/$ECR_BACKEND_REPO:${{ github.sha }}
 
-      # ✅ Install Trivy
-      - name: Install Trivy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+    - name: Push Backend Image
+      run: |
+        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_BACKEND_REPO:${{ github.sha }}
 
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+    # ---------------- FRONTEND ----------------
+    - name: Build Frontend Image
+      run: |
+        docker build -t $ECR_FRONTEND_REPO ./frontend
+        docker tag $ECR_FRONTEND_REPO:latest ${{ steps.login-ecr.outputs.registry }}/$ECR_FRONTEND_REPO:${{ github.sha }}
 
-          sudo apt-get update
-          sudo apt-get install trivy -y
+    - name: Push Frontend Image
+      run: |
+        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_FRONTEND_REPO:${{ github.sha }}
 
-      # ================= BACKEND =================
+    # ---------------- DEPLOY BACKEND ----------------
+    - name: Deploy Backend
+      run: |
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_BACKEND_SERVICE \
+          --force-new-deployment
 
-      - name: Build Backend Image
-        run: docker build -t backend ./backend
-
-      - name: Scan Backend Image
-        run: trivy image backend
-
-      - name: Tag Backend Image
-        run: |
-          docker tag backend:latest ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_REPO }}:latest
-          docker tag backend:latest ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_REPO }}:${{ github.sha }}
-
-      - name: Push Backend Image
-        run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_REPO }}:latest
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_BACKEND_REPO }}:${{ github.sha }}
-
-      # ================= FRONTEND =================
-
-      - name: Build Frontend Image
-        run: |
-          docker build -t frontend ./frontend \
-            --build-arg VITE_BACKEND_URL=/api
-
-      - name: Scan Frontend Image
-        run: trivy image frontend
-
-      - name: Tag Frontend Image
-        run: |
-          docker tag frontend:latest ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_FRONTEND_REPO }}:latest
-          docker tag frontend:latest ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_FRONTEND_REPO }}:${{ github.sha }}
-
-      - name: Push Frontend Image
-        run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_FRONTEND_REPO }}:latest
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_FRONTEND_REPO }}:${{ github.sha }}
-
-      # ================= OPTIONAL DEPLOY =================
-
-      - name: Copy Configs to Server
-        continue-on-error: true
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ubuntu
-          key: ${{ secrets.SSH_KEY }}
-          source: "docker-compose.yml,prometheus.yml"
-          target: "~/app"
-
-      - name: Deploy
-        continue-on-error: true
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HOST }}
-          username: ubuntu
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -e
-            cd ~/app
-            docker login -u AWS -p $(aws ecr get-login-password --region ${{ vars.AWS_REGION }}) ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
-            docker-compose pull
-            docker-compose up -d
-            sleep 10
-            docker image prune -f
+    # ---------------- DEPLOY FRONTEND ----------------
+    - name: Deploy Frontend
+      run: |
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_FRONTEND_SERVICE \
+          --force-new-deployment
